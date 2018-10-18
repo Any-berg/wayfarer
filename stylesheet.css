@@ -1,0 +1,31 @@
+/* http://graphstream-project.org/doc/Advanced-Concepts/GraphStream-CSS-Reference/ */
+
+edge {
+	size: 2;
+	arrow-size: 8, 5;
+}
+node {
+	shape: rounded-box;
+	size: 20;
+	text-color: white;
+	text-size: 18;
+	stroke-mode: plain;
+	stroke-color: black;
+	stroke-width: 2;
+}
+node.unresolved {
+	fill-color: white;
+	text-color: black;
+	stroke-mode: dots;
+}
+node.unresolved:clicked {
+	fill-color: red;
+	stroke-color: red;
+}
+node.goal {
+	text-color: red;
+	stroke-color: red;
+}
+node.goal:clicked {
+	text-color: white;
+}
