@@ -4,6 +4,9 @@ edge {
 	size: 2;
 	arrow-size: 8, 5;
 }
+edge.invisible {
+	visibility-mode: hidden;
+}
 node {
 	shape: rounded-box;
 	size: 20;

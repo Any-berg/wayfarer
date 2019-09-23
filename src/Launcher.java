@@ -1,51 +1,61 @@
 import java.awt.Dimension;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.HashMap;
-import java.util.Vector;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.swing.JFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 
 import org.graphstream.ui.view.Viewer;
 import org.graphstream.ui.view.ViewerListener;
 import org.graphstream.ui.view.ViewerPipe;
+
 import org.graphstream.graph.Edge;
 import org.graphstream.graph.Graph;
 import org.graphstream.graph.Node;
 import org.graphstream.graph.implementations.SingleGraph;
 import org.graphstream.ui.swingViewer.ViewPanel;
 
-public class Launcher implements ViewerListener, Runnable {
+/**
+ * Generates strongly connected graphs. Tries to preserve planarity.
+ * 
+ * Current issues:
+ * - generated graphs should not be nonplanar (not sure if they can be that, or merely "inconvenient")
+ * 
+ *
+ */
+
+public class Launcher implements ViewerListener, ActionListener, Runnable {
+	
 	private Graph					graph;
+	private map.Graph				g;
 	private ViewerPipe				pipe;
 	private boolean					loop = true;
 	private int						clicks = 0;
-	private HashMap<Node,map.Node>	map = new HashMap<Node,map.Node>();
+	private HashMap<Node,map.Node>	index = new HashMap<Node,map.Node>();
 	
 	public Launcher() {
 		graph = new SingleGraph("embedded");
+		g = new map.Graph();
+		initialize();
+	}
+	private map.Node initialize() {
 		graph.addAttribute("ui.stylesheet", "url('file://"+System.getProperty("user.dir")+"/stylesheet.css')");
-
-		map.Node value = new map.Goal();
+		map.Node value = g.getNode();
 		Node key = graph.addNode(value.toString());
-		map.put(key, value);
+		index.put(key, value);
 		key.addAttribute("ui.label", value.toString());
 		key.addAttribute("ui.class", "goal, unresolved"); // order matters
+		return value;
 	}
-/*	private final Node add(String id) {
-		Node node = graph.addNode(id);
-		node.addAttribute("ui.label", id);
-		node.addAttribute("ui.class", "unresolved");
-		return node;
-	}//*/
-/*	private final Node add() {
-		map.Node value = new map.Node();
-		Node key = graph.addNode(value.toString());
-		map.put(key, value);
-		key.addAttribute("ui.label", value.toString());
-		key.addAttribute("ui.class", "unresolved");
-		return key;
-	}//*/
 
-	
 	public static void main(String[] args) {
 		System.setProperty("org.graphstream.ui.renderer", "org.graphstream.ui.j2dviewer.J2DGraphRenderer");
 		
@@ -55,6 +65,7 @@ public class Launcher implements ViewerListener, Runnable {
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.setMinimumSize(new Dimension(200,200));
 		frame.add(launcher.getView());
+		frame.setJMenuBar(launcher.getMenuBar());
 		frame.pack();
 		frame.setVisible(true);
 		
@@ -62,9 +73,23 @@ public class Launcher implements ViewerListener, Runnable {
 		System.out.println("Closed?");
 
 	}
-	
+	private final JMenuBar getMenuBar() {
+		JMenuBar menubar = new JMenuBar();
+		JMenu menu = new JMenu("File");
+		JMenuItem menuItem = new JMenuItem("New");
+		menuItem.addActionListener(this);
+		menu.add(menuItem);
+		menuItem = new JMenuItem("Open");
+		menuItem.addActionListener(this);
+		menu.add(menuItem);
+		menuItem = new JMenuItem("Save");
+		menuItem.addActionListener(this);
+		menu.add(menuItem);
+		menubar.add(menu);
+		return menubar;
+	}
 	private final ViewPanel getView() {
-		System.out.println("Initializing Viewer");
+		System.out.println("Initializing viewer");
 		Viewer viewer = new Viewer(graph, Viewer.ThreadingModel.GRAPH_IN_GUI_THREAD);
 		viewer.enableAutoLayout();
 		pipe = viewer.newViewerPipe();
@@ -79,151 +104,151 @@ public class Launcher implements ViewerListener, Runnable {
 	}
 	@Override public void buttonPushed(String id) {
 	}
-	private Node add(map.Node value) {
-		String id = value.toString();
-		Node key = graph.getNode(id);		
-		if (key == null) {
-			System.out.println("ADDing node "+id);
-			key = graph.addNode(id);
-			map.put(key, value);
-			key.addAttribute("ui.label", value.toString());
-			key.addAttribute("ui.class", "unresolved");
-			for (map.Node n : value.to) {
-				if (!map.values().contains(n)) {
-					id = n.toString();
-					System.out.println("Adding node "+id);
-					Node node = graph.addNode(id);
-					map.put(node, n);
-					node.addAttribute("ui.label", id);
-					node.addAttribute("ui.class", "unresolved");
-				}
-				if (n.to.contains(value)) {
-					System.out.println("+"+value+n);
-					graph.addEdge(value+"-"+n, value.toString(), n.toString());
-				} else {
-					if (value.to.size() > 1) {
-						System.out.println("~"+n+value.to.get(1)+" +"+value+n+" "+value.to);
-						// if there is an undirected edge, replace it with a directed one
-						if (graph.removeEdge((Edge)graph.getNode(n.toString()).getEdgeBetween(value.to.get(1).toString())) != null)
-							graph.addEdge(n+"-"+value.to.get(1), n.toString(), value.to.get(1).toString(), true);
-					}
-					graph.addEdge(value+"-"+n, value.toString(), n.toString(), true);
-				}
-			}
-		}
-		else
-			System.out.println(key+" EXISTS");
-		return key;
-	}
 	private Node node(map.Node value) {
 		String id = value.toString();
 		Node key = graph.getNode(id);
 		if (key == null) {
 			key = graph.addNode(id);
-			map.put(key, value);
+			index.put(key, value);
 			key.addAttribute("ui.label", value.toString());
-			key.addAttribute("ui.class", "unresolved");
+			key.addAttribute("ui.class", (value.hashCode() == 0 ? "goal,":"")+"unresolved");
 		}
 		return key;
 	}
 	@Override public void buttonReleased(String id) {
-		if (clicks++ > 0) {// i.e. doubleclick
+		if (clicks++ > 0) {
 			Node node = graph.getNode(id);
 			String classes = node.getAttribute("ui.class");
 			if (classes != null) {
-				Vector<String[]> v = new Vector<String[]>();
 				System.out.print("Resolving node "+id);
-				map.Node resolved = map.get(node).resolve();
-				System.out.println(resolved.toString().equals(id) ? "" : " as "+resolved);
+				map.Node clicked = g.getNode(id), resolved = g.resolve(clicked);
 				node(resolved).removeAttribute("ui.class");
-                for (Edge e : node.getEachLeavingEdge()) {
-                	if (e == null)
-                		System.out.println("WTF");
-                	map.Node n = map.get(e.getOpposite(node));
-                	if (!resolved.toString().equals(id)) {
-                		System.out.print(id+"!>"+n+", ");
-                		graph.removeEdge(e);
-                		continue;
-                	}
-                	if (n != null && !resolved.to.contains(n)) {// && n.to.contains(resolved)) {
-						System.out.print(resolved+"!>"+n); //.get(0).to.get(0).to);
-						//v.add(new String[] { e.getId() });
-						graph.removeEdge(e);
-						if (resolved.to.lastElement().to.contains(n)) {//(n.to.contains(resolved)) {
-							if (!e.isDirected()) {
-								System.out.print(", "+n+"->"+node);
-								//v.add(new String[] { n.toString(), resolved.toString() });
-								graph.addEdge(n+"-"+resolved, n.toString(), resolved.toString(), true);
-							}
-							n = resolved.to.lastElement();
-							System.out.print(", "+n+"->"+n.to.get(0));
-							//v.add(new String[] { node(n).toString(), n.to.get(0).toString() } );
-							graph.addEdge(node(n)+"-"+n.to.get(0), n.toString(), n.to.get(0).toString(), true);
+				if (clicked == resolved) {
+					System.out.println();
+					for (Edge e : node.getEachLeavingEdge()) //TODO: test with
+						if (e.isDirected())
+							System.out.println("REMOVED "+graph.removeEdge(e));
+						else if (!resolved.to.contains(g.getNode(e.getSourceNode().toString()))) {
+							System.out.print("MODIFIED "+graph.removeEdge(e));
+							System.out.println(" INTO "+graph.addEdge(e.getId(), e.getSourceNode().toString(), e.getTargetNode().toString(), true));
 						}
-						else if (!e.isDirected()) {
-							System.out.print(", "+n+"->"+resolved);
-							//v.add(new String[] { n.toString(), resolved.toString() });
-							graph.addEdge(n+"-"+resolved, n.toString(), resolved.toString(), true);
-						}
-						System.out.println();
+				}
+				else {
+					System.out.println(" as "+resolved);
+					for (Edge e : node.getEachLeavingEdge())
+						if (e.isDirected())
+							System.out.println("REMOVED "+graph.removeEdge(e));
+					for (Edge e : node.getEachEdge()) {
+						System.out.println("REMOVED "+graph.removeEdge(e));
+						map.Node n = g.getNode(e.getOpposite(node).toString());
+						if (n.to.contains(resolved))
+							System.out.println("ADDED "+graph.addEdge(n+"-"+resolved, node(n), node(resolved), !resolved.to.contains(n))); //TODO: validate if always directed?
 					}
-                }
-            /*	for (String[] edge : v)
-                	if (edge.length == 2)
-                		graph.addEdge(edge[0]+"-"+edge[1], edge[0], edge[1], true);
-                	else
-                		graph.removeEdge(edge[0]); //*/
-                node = node(resolved);
+				}
 				for (map.Node n : resolved.to)
-					if (!node.hasEdgeBetween(n.toString())) {
-						System.out.println(resolved+"--"+n);
-						graph.addEdge(resolved+"-"+node(n), resolved.toString(), n.toString());	
-				    }
-				if (true)
-					return;
-				
-				
-				for (Edge e : node.getEachLeavingEdge())
-					if (e.isDirected()) {
-						System.out.println("* "+resolved.to);
-						graph.removeEdge(e);
-						//add(resolved.to.get(0));
-						//graph.addEdge(node+"-"+resolved.to.get(0), node.toString(), resolved.to.get(0).toString());
-						//System.out.println("? "+node+" "+resolved+" "+resolved.to);
+					if (!node(resolved).hasEdgeToward(n.toString())) {
+						System.out.print("ADDED "+graph.addEdge(resolved+"-"+n, node(resolved), node(n), !n.to.contains(resolved)));
+					    for (map.Node m : n.to)
+					    	if (!node(n).hasEdgeToward(m.toString()))
+					    	    System.out.print(" AND "+graph.addEdge(n+"-"+m, node(n), node(m), !m.to.contains(n)));
+					    System.out.println();
 					}
-					else
-						System.out.println(">>"+e.getOpposite(node)+" "+resolved.to);
-				if (!resolved.toString().equals(id)) {
-					System.out.println(id+" -> "+resolved);
-					for (Edge edge : node.getEachEdge()) // detach Goal from prior connections
-						graph.removeEdge(edge);
-					add(resolved).removeAttribute("ui.class");
-					return;
-				}
-			/*	else
-					for (Edge edge : node.getEachEdge())
-						graph.removeEdge(edge); //*/
-				node.removeAttribute("ui.class");
-				for (map.Node n : resolved.to) {
-					add(n);
-				}
-				
-			/*	System.out.println("resolving node "+id);
-				if (classes.matches("(^|.*[, ])goal($|[, ].*)")) {
-					Node m = add();
-					m.changeAttribute("ui.class", "goal, unresolved");
-					graph.addEdge(id+n.toString(), id, m.toString(), true);	
-				}//*/
-				//System.out.println(map);
 			}
+			System.out.println(g);
 		}
 	}
+	
 	@Override public void run() {
-        do {
+		do {
         	clicks = 0;
             pipe.pump();
-            try { Thread.sleep(300); } catch (Exception e) {}
+            try { Thread.sleep(400); } catch (Exception e) {}
         } while (loop);
-		
 	}
+	
+	@Override public void actionPerformed(ActionEvent e) {
+		String cmd = e.getActionCommand();
+		if (cmd.equals("New")) {
+			System.out.println("Resetting graph");
+			index.clear();
+			graph.clear();
+			g.clear();
+			initialize();
+		}
+		else if (cmd.equals("Save")) {
+			System.out.println(g);
+		}
+		else if (cmd.equals("Open")) {
+			System.out.println("Resetting graph");
+			index.clear();
+			graph.clear();
+			g.clear();
+			open("test");
+		}
+	}
+    private void open(String filename) {// no assumptions about sortedness 
+    	HashMap<Integer,Node> index = new HashMap<Integer,Node>();
+    	
+    	String content;
+    	Pattern p;
+		Matcher m;
+		try {
+    		int offset = 0;
+    		content = new String(Files.readAllBytes(Paths.get(filename)));
+    		p = Pattern.compile("\\G(\\d+)(,\\s*)?");
+    		m = p.matcher(content);
+    	    while (m.find()) {
+    			int i = map.Graph.toInt(m.group(1));
+    			System.out.println("Creating unresolved node "+i);
+    			Node node = addNode(i, true);
+    			index.put(i, node);
+     		    offset = m.end();
+     		}
+    		if (content.charAt(offset++) != ';')
+    			throw new IOException("unexpected '"+content.charAt(offset-1)+"'");
+    		content = content.substring(offset);
+    		p = Pattern.compile("\\G\\s*(\\d+) *([->]) *(\\d+),?");
+    		m = p.matcher(content);
+    		offset = 0;
+    		while (m.find()) {
+    			int i = map.Graph.toInt(m.group(1));
+    			Node from = index.get(i), to;
+    			if (from == null) {
+    				System.out.println("Creating resolved node "+i);
+    				index.put(i, from = addNode(i, false));
+    			}
+    			i = map.Graph.toInt(m.group(3));
+    			to = index.get(i);
+    			if (to == null) {
+       				System.out.println("Creating resolved node "+i);
+       				index.put(i, to = addNode(i, false));
+    			}
+    			boolean isDirected = m.group(2).equals(">");
+    			graph.addEdge(from.toString()+"-"+to.toString(), from, to, isDirected);
+    			g.addEdge(g.getNode(from.toString()), g.getNode(to.toString()), isDirected);
+    			System.out.println("Adding edge from node "+m.group(1)+" to node "+m.group(3));
+    			if (!isDirected)
+    				System.out.println("Adding edge from node "+m.group(3)+" to node "+m.group(1));
+    		    offset = m.end();
+    		}
+    		if (content.length() != offset)
+    			throw new IOException("unexpected '"+content.substring(offset)+"'");
+    	} catch (IOException e) { e.printStackTrace(); }
+		
+    	graph.addAttribute("ui.stylesheet", "url('file://"+System.getProperty("user.dir")+"/stylesheet.css')");
+    	System.out.println(g);
+    }
+    
+    private Node addNode(Integer i, boolean isUnresolved) {
+    	//map.Node n = new map.Node(i);
+    	map.Node n = g.getNode(i);
+    	Node node = graph.addNode(n.toString());
+    	index.put(node, n);
+		node.addAttribute("ui.label", i.toString()); //TODO:
+		if (isUnresolved) {
+		    node.addAttribute("ui.class", (i == 0 ? "goal,":"")+"unresolved");
+		    g.unresolved(n);
+		}
+    	return node;
+    }//*/
 }
